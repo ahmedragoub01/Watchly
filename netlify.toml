@@ -1,0 +1,12 @@
+[build]
+  command = "npm install --include=dev && npm run build -w shared -w client"
+  publish = "client/dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+

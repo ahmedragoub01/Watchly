@@ -1,0 +1,24 @@
+{
+  "name": "watchly",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Watch together. Feel it together.",
+  "workspaces": [
+    "shared",
+    "server",
+    "client"
+  ],
+  "type": "module",
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "dev:server": "npm run dev -w server",
+    "dev:client": "npm run dev -w client"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
