@@ -3,15 +3,7 @@
   "services": {
     "client": {
       "root": "client",
-      "framework": "vite",
-      "bindings": [
-        {
-          "type": "service",
-          "service": "server",
-          "format": "url",
-          "env": "SERVER_URL"
-        }
-      ]
+      "framework": "vite"
     },
     "server": {
       "root": "server",
