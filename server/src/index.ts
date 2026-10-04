@@ -28,8 +28,24 @@ app.use(helmet({
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 }));
 
+function isOriginAllowed(origin: string | undefined): boolean {
+  if (!origin) return true;
+  if (origin === config.clientUrl) return true;
+  if (config.clientServiceUrl && origin === config.clientServiceUrl) return true;
+  try {
+    const originUrl = new URL(origin);
+    return config.isDev
+      ? originUrl.hostname === 'localhost'
+      : originUrl.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 app.use(cors({
-  origin: config.clientUrl,
+  origin: (origin, callback) => {
+    callback(null, isOriginAllowed(origin));
+  },
   methods: ['GET', 'POST', 'PATCH', 'DELETE'],
   credentials: true,
 }));

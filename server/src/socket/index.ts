@@ -15,10 +15,26 @@ declare module 'socket.io' {
   }
 }
 
+function isSocketOriginAllowed(origin: string | undefined): boolean {
+  if (!origin) return true;
+  if (origin === config.clientUrl) return true;
+  if (config.clientServiceUrl && origin === config.clientServiceUrl) return true;
+  try {
+    const originUrl = new URL(origin);
+    return config.isDev
+      ? originUrl.hostname === 'localhost'
+      : originUrl.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export function createSocketServer(httpServer: HttpServer): Server {
   const io = new Server(httpServer, {
     cors: {
-      origin: config.clientUrl,
+      origin: (origin, callback) => {
+        callback(null, isSocketOriginAllowed(origin));
+      },
       methods: ['GET', 'POST'],
       credentials: true,
     },

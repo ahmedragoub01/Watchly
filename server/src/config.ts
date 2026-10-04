@@ -18,6 +18,8 @@ export const config = {
 
   clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
 
+  clientServiceUrl: process.env.CLIENT_SERVICE_URL,
+
   jwtSecret: isProduction ? jwtSecret : (jwtSecret || 'dev-secret-change-in-production'),
 
   dbPoolMax: 5,
