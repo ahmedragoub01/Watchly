@@ -1,15 +1,15 @@
-import { io, Socket } from 'socket.io-client';
+import { io, type Socket } from 'socket.io-client';
 
-const SOCKET_URL = import.meta.env.VITE_API_URL || '';
+const SOCKET_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 
 let socket: Socket | null = null;
 
 export function getSocket(): Socket {
   if (!socket) {
-    socket = io(SOCKET_URL, {
+    socket = io(SOCKET_URL || undefined, {
       autoConnect: false,
       reconnection: true,
-      reconnectionAttempts: 20,
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 10000,
       transports: ['websocket', 'polling'],
