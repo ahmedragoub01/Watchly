@@ -21,17 +21,31 @@ import { rateLimit, authRateLimit } from './middleware/rateLimit.js';
 const app = express();
 const httpServer = createServer(app);
 
+// Render (and most PaaS hosts) sit behind a reverse proxy.
+// Needed so req.ip is the real client IP (rate limiting, logging).
+app.set('trust proxy', 1);
+
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
   crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 }));
 
+const normalizeOrigin = (value: string | undefined | null): string =>
+  (value || '').trim().replace(/\/+$/, '');
+
+const allowedOrigins = new Set(
+  [config.clientUrl, config.clientServiceUrl]
+    .map(normalizeOrigin)
+    .filter(Boolean),
+);
+
 function isOriginAllowed(origin: string | undefined): boolean {
+  // Non-browser clients (curl, server-to-server) send no Origin header
   if (!origin) return true;
-  if (origin === config.clientUrl) return true;
-  if (config.clientServiceUrl && origin === config.clientServiceUrl) return true;
+  if (allowedOrigins.has(normalizeOrigin(origin))) return true;
   try {
     const originUrl = new URL(origin);
     return config.isDev
@@ -46,11 +60,15 @@ app.use(cors({
   origin: (origin, callback) => {
     callback(null, isOriginAllowed(origin));
   },
-  methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   credentials: true,
 }));
 
 app.use(express.json());
+
+app.get('/', (_req, res) => {
+  res.json({ name: 'watchly-api', status: 'ok' });
+});
 
 app.use('/api', rateLimit(60, 60_000));
 app.use('/api/auth', authRateLimit);
@@ -66,9 +84,9 @@ app.use('/api/notifications', notificationsRouter);
 
 app.use(errorHandler);
 
-const io = createSocketServer(httpServer);
+createSocketServer(httpServer);
 
-setInterval(() => {
+const cleanupInterval = setInterval(() => {
   roomState.cleanupEmptyRooms(5 * 60 * 1000);
 }, 60_000);
 
@@ -92,5 +110,16 @@ async function start() {
     });
   });
 }
+
+function shutdown(signal: string) {
+  logger.info(`${signal} received, shutting down`);
+  clearInterval(cleanupInterval);
+  httpServer.close(() => process.exit(0));
+  // Force exit if connections hang
+  setTimeout(() => process.exit(0), 10_000).unref();
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 start();

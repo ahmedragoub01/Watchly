@@ -42,18 +42,20 @@ interface UseRoomReturn {
 export function useRoom(): UseRoomReturn {
   const [roomState, setRoomState] = useState<RoomState | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [reactions, setReactions] = useState<Reaction[]>([]);
   const [recentReactions, setRecentReactions] = useState<ReactionReceivedEvent[]>([]);
   const [clockOffset, setClockOffset] = useState(0);
   const roomIdRef = useRef<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
+  const displayNameRef = useRef<string>('User');
 
   useEffect(() => {
     const socket = connectSocket();
+    const manager = socket.io;
 
-    socket.on('connect', () => {
+    const onConnect = () => {
       setConnectionStatus('connected');
 
       socket.emit(C2S.CLOCK_SYNC, { clientTime: Date.now() });
@@ -61,15 +63,21 @@ export function useRoom(): UseRoomReturn {
       if (roomIdRef.current && sessionIdRef.current) {
         socket.emit(C2S.ROOM_JOIN, {
           roomId: roomIdRef.current,
-          displayName: roomState?.participants.find(p => p.sessionId === sessionIdRef.current)?.displayName || 'User',
+          displayName: displayNameRef.current,
           sessionId: sessionIdRef.current,
         });
       }
-    });
+    };
 
-    socket.on('disconnect', () => setConnectionStatus('disconnected'));
-    socket.on('reconnecting', () => setConnectionStatus('reconnecting'));
-    socket.on('reconnect_attempt', () => setConnectionStatus('reconnecting'));
+    const onDisconnect = () => setConnectionStatus('disconnected');
+    const onReconnecting = () => setConnectionStatus('reconnecting');
+
+    socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
+    manager.on('reconnect_attempt', onReconnecting);
+    manager.on('reconnect', onConnect);
+
+    if (socket.connected) onConnect();
 
     socket.on(S2C.CLOCK_SYNC_RESPONSE, (data: { clientTime: number; serverTime: number }) => {
       const rtt = Date.now() - data.clientTime;
@@ -115,7 +123,7 @@ export function useRoom(): UseRoomReturn {
     });
 
     socket.on(S2C.PRESENCE_UPDATE, (participants: Participant[]) => {
-      setRoomState(prev => prev ? { ...prev, participants } : prev);
+      setRoomState(prev => (prev ? { ...prev, participants } : prev));
     });
 
     socket.on(S2C.PLAYBACK_PLAY, (event: PlaybackPlayEvent) => {
@@ -195,10 +203,12 @@ export function useRoom(): UseRoomReturn {
     });
 
     socket.on(S2C.ROOM_ENDED, () => {
-      setRoomState(prev => prev ? { ...prev, status: 'ended' } : prev);
+      setRoomState(prev => (prev ? { ...prev, status: 'ended' } : prev));
     });
 
     return () => {
+      manager.off('reconnect_attempt', onReconnecting);
+      manager.off('reconnect', onConnect);
       socket.removeAllListeners();
       disconnectSocket();
     };
@@ -207,6 +217,8 @@ export function useRoom(): UseRoomReturn {
   const joinRoom = useCallback((roomId: string, displayName: string, existingSessionId?: string) => {
     const socket = getSocket();
     roomIdRef.current = roomId;
+    displayNameRef.current = displayName;
+    if (existingSessionId) sessionIdRef.current = existingSessionId;
     const payload: JoinRoomPayload = { roomId, displayName, sessionId: existingSessionId };
     socket.emit(C2S.ROOM_JOIN, payload);
   }, []);
@@ -215,6 +227,7 @@ export function useRoom(): UseRoomReturn {
     const socket = getSocket();
     socket.emit(C2S.ROOM_LEAVE, {});
     roomIdRef.current = null;
+    sessionIdRef.current = null;
     setRoomState(null);
     setMessages([]);
     setReactions([]);
